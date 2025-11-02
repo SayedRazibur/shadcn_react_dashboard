@@ -8,49 +8,56 @@ const axiosSecure = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
-instance.interceptors.request.use(
+// 🔹 Request Interceptor
+axiosSecure.interceptors.request.use(
   (config) => {
-    const token = TokenService.getLocalAccessToken();
+    const token = TokenService.getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-instance.interceptors.response.use(
-  (res) => {
-    return res;
-  },
-  async (err) => {
-    const originalConfig = err.config;
+// 🔹 Response Interceptor
+axiosSecure.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
 
-    if (originalConfig.url !== '/auth/signin' && err.response) {
-      // Access Token was expired
-      if (err.response.status === 401 && !originalConfig._retry) {
-        originalConfig._retry = true;
+    // Skip refresh logic for login
+    if (originalRequest.url.includes('/auth/signin')) {
+      return Promise.reject(error);
+    }
 
-        try {
-          const rs = await instance.post('/auth/refreshtoken', {
-            refreshToken: TokenService.getLocalRefreshToken(),
-          });
+    // Token expired → try refresh once
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
 
-          const { accessToken } = rs.data;
-          TokenService.updateLocalAccessToken(accessToken);
+      try {
+        // Call refresh endpoint
+        const refreshResponse = await axiosSecure.post('/auth/refreshtoken');
 
-          return instance(originalConfig);
-        } catch (_error) {
-          return Promise.reject(_error);
+        const { accessToken } = refreshResponse.data;
+        if (accessToken) {
+          // Update access token in session storage
+          TokenService.updateAccessToken(accessToken);
+
+          // Retry original request with new token
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return axiosSecure(originalRequest);
         }
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        return Promise.reject(refreshError);
       }
     }
 
-    return Promise.reject(err);
+    return Promise.reject(error);
   }
 );
 
