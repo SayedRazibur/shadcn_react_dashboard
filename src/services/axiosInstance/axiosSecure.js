@@ -30,7 +30,7 @@ axiosSecure.interceptors.response.use(
     const originalRequest = error.config;
 
     // Skip refresh logic for login
-    if (originalRequest.url.includes('/auth/signin')) {
+    if (originalRequest.url.includes('/auth/login')) {
       return Promise.reject(error);
     }
 
@@ -40,7 +40,7 @@ axiosSecure.interceptors.response.use(
 
       try {
         // Call refresh endpoint
-        const refreshResponse = await axiosSecure.post('/auth/refreshtoken');
+        const refreshResponse = await axiosSecure.post('/auth/refresh-token');
 
         const { accessToken } = refreshResponse.data;
         if (accessToken) {
